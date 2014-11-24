@@ -1,0 +1,285 @@
+<?php
+
+/**
+ * @file
+ * A module used for processing tokenized, PCI-friendly credit card payments with SecureSubmit.
+ */
+
+/**
+ * Implements hook_payment_gateway().
+ */
+function uc_securesubmit_uc_payment_gateway() {
+    $gateways = array();
+
+    $gateways['uc_securesubmit'] = array(
+        'title' => t('Heartland Payment Systems SecureSubmit Gateway'),
+        'description' => t('Process credit cards securely with Heartland Payment Systems.'),
+        'settings' => 'uc_securesubmit_settings_form',
+        'credit' => 'uc_securesubmit_charge',
+    );
+
+    return $gateways;
+}
+
+/**
+ * Implements hook_library_info().
+ */
+function uc_securesubmit_libraries_info() {
+  $libraries = array();
+
+  $libraries['securesubmit'] = array(
+    'name' => 'SecureSubmit PHP SDK',
+    'vendor url' => 'https://developer.heartlandpaymentsystems.com/securesubmit/',
+    'download url' => 'https://github.com/SecureSubmit/heartland-php',
+    'path' => 'lib',
+    'version arguments' => array(
+      'file' => 'VERSION',
+      'pattern' => '/(.*)/',
+      'lines' => 1,
+    ),
+    'files' => array(
+      'php' => array(
+        'Hps.php',
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function uc_securesubmit_form_uc_cart_checkout_form_alter(&$form, &$form_state) {
+    $public_key = variable_get('uc_securesubmit_public_key', '');
+
+    $form['#attached']['js'][] = array(
+        'data' => "var securesubmit_public_key = '$public_key';",
+        'type' => 'inline'
+    );
+    $form['#attached']['js'][] = array(
+        'data' => drupal_get_path('module', 'uc_securesubmit') . '/js/jquery.securesubmit.js',
+        'type' => 'file'
+    );
+    $form['#attached']['js'][] = array(
+        'data' => drupal_get_path('module', 'uc_securesubmit') . '/js/securesubmit.js',
+        'type' => 'file'
+    );
+
+    array_unshift($form['#submit'], "uc_securesubmit_checkout_form_customsubmit");
+
+    $form['panes']['payment']['securesubmit_token'] = array(
+        '#type' => 'textfield',
+        '#title' => "SecureSubmit Token",
+        '#size' => 60,
+        '#maxlength' => 64,
+    );
+
+    $form['panes']['payment']['securesubmit_card_number'] = array(
+        '#type' => 'textfield',
+        '#title' => "Card Number",
+        '#default_value' => "",
+        '#name' => "", // we don't want this to post
+        '#size' => 60,
+        '#maxlength' => 64,
+        '#description' => "Enter your card number",
+    );
+
+    $form['panes']['payment']['securesubmit_card_month'] = array(
+        '#type' => 'textfield',
+        '#title' => "Exp Month",
+        '#default_value' => "",
+        '#name' => "", // we don't want this to post
+        '#size' => 60,
+        '#maxlength' => 64,
+        '#description' => "MM",
+    );
+
+    $form['panes']['payment']['securesubmit_card_year'] = array(
+        '#type' => 'textfield',
+        '#title' => "Exp Year",
+        '#default_value' => "",
+        '#name' => "", // we don't want this to post
+        '#size' => 60,
+        '#maxlength' => 64,
+        '#description' => "YYYY",
+    );
+
+    $form['panes']['payment']['securesubmit_card_cvc'] = array(
+        '#type' => 'textfield',
+        '#title' => "CVV",
+        '#default_value' => "",
+        '#name' => "", // we don't want this to post
+        '#size' => 60,
+        '#maxlength' => 64,
+        '#description' => "Enter the 3 or 4 digit Card Security Code from the back of your card",
+    );
+
+    $form['panes']['messages'] = array(
+        '#type' => 'markup',
+        '#value' => "<div id='uc_securesubmit_messages' class='messages error hidden'></div>",
+    );
+}
+
+/**
+ * Set the created token value to the session for this customer.
+ */
+function uc_securesubmit_checkout_form_customsubmit($form, &$form_state){
+    $_SESSION['securesubmit']['token'] = $form_state['values']['panes']['payment']['securesubmit_token'];
+}
+
+/**
+ * Form builder for payment gateway settings.
+ */
+function uc_securesubmit_settings_form() {
+    $form['uc_securesubmit_settings'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('SecureSubmit settings'),
+    );
+
+    $form['uc_securesubmit_settings']['uc_securesubmit_public_key'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Public API Key'),
+        '#default_value' => variable_get('uc_securesubmit_public_key', ''),
+        '#description' => t('Your Certification Public API Key.'),
+    );
+
+    $form['uc_securesubmit_settings']['uc_securesubmit_secret_key'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Secret API Key'),
+        '#default_value' => variable_get('uc_securesubmit_secret_key', ''),
+        '#description' => t('Your Certification Secret API Key.'),
+    );
+
+    return $form;
+}
+
+/**
+ * Load the SecureSubmit PHP SDK
+ */
+function _uc_securesubmit_load_api() {
+    if ($path = libraries_get_path('securesubmit')) {
+        include_once $path . '/Hps.php';
+    }
+    else {
+        watchdog('uc_securesubmit', 'SecureSubmit PHP SDK missing. Please download and place it into sites/all/libraries/securesubmit', array(), WATCHDOG_WARNING);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+function uc_securesubmit_charge($order_id, $amount, $data) {
+    global $user;
+
+    if (!_uc_securesubmit_load_api()) {
+        $result = array(
+            'success' => FALSE,
+            'comment' => t('SecureSubmit PHP SDK not found.'),
+            'message' => t('The SecureSubmit PHP SDK was not found, please contact the site administrator.'),
+            'uid' => $user->uid,
+            'order_id' => $order_id,
+        );
+
+        return $result;
+    }
+
+    $order = uc_order_load($order_id);
+
+    if(empty($_SESSION['securesubmit']['token'])) {
+        throw new Exception('Token not found');
+    }
+
+    $secret_key = variable_get('uc_securesubmit_secret_key', '');
+    $securesubmit_token = $_SESSION['securesubmit']['token'];
+
+    // allow free products.
+    if ($amount == 0) {
+        $result = array(
+            'success' => TRUE,
+            'message' => t('Credit card payment of $0 approved.'),
+            'uid' => $user->uid,
+            'trans_id' => md5(uniqid(rand())),
+        );
+
+        uc_order_comment_save($order_id, $user->uid, $result['message'], 'admin');
+
+        return $result;
+    }
+
+    try {
+        $config = new HpsConfiguration();
+        $config->secretApiKey = $secret_key;
+        $config->versionNumber = '1823';
+        $config->developerId = '002914';
+
+        $chargeService = new HpsChargeService($config);
+
+        $address = new HpsAddress();
+        $address->address = $order->billing_street1;
+        $address->state = uc_get_zone_code($order->billing_zone);
+        $address->zip = preg_replace('/[^0-9]/', '', $order->billing_postal_code);
+
+        $cardHolder = new HpsCardHolder();
+        $cardHolder->firstName = $order->billing_first_name;
+        $cardHolder->lastName = $order->billing_last_name;
+        $cardHolder->email = $order->primary_email;
+        $cardHolder->address = $address;
+
+        $token = new HpsTokenData();
+        $token->tokenValue = $securesubmit_token;
+
+        $details = new HpsTransactionDetails();
+        $details->invoiceNumber = $order_id;
+
+        $response = $chargeService->charge(
+            $amount,
+            "usd",
+            $token,
+            $cardHolder,
+            false,
+            $details);
+
+        $result = array(
+            'success' => TRUE,
+            'message' => "Credit card payment of $$amount processed successfully.",
+            'uid' => $user->uid,
+            'trans_id' => $response->transactionId,
+        );
+
+        uc_order_comment_save($order_id, $user->uid, $result['message'], 'admin');
+        uc_order_comment_save($order_id, $user->uid, $result['message'], 'order', 'completed', false);
+
+        return $result;
+
+    }
+    catch (HpsException $e) {
+        $result = array(
+            'success' => FALSE,
+            'comment' => $e->getCode(),
+            'message' => t("SecureSubmit Charge Failed for order !order: !message", array("!order" => $order_id, "!message" => $e->getMessage())),
+            'uid' => $user->uid,
+            'order_id' => $order_id,
+        );
+
+        uc_order_comment_save($order_id, $user->uid, $result['message'], 'admin');
+
+        watchdog('uc_securesubmit', $result['message']);
+
+        return $result;
+    }
+
+    $result = array(
+        'success' => FALSE,
+        'comment' => "SecureSubmit Gateway Error",
+        'message' => "SecureSubmit Gateway Error",
+        'uid' => $user->uid,
+        'order_id' => $order_id,
+    );
+
+    uc_order_comment_save($order_id, $user->uid, $result['message'], 'admin');
+
+    watchdog('uc_securesubmit', $result['message']);
+
+    return $result;
+}

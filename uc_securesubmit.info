@@ -1,0 +1,8 @@
+name = Heartland SecureSubmit
+description = Process credit cards securely using Heartland Payment Systems SecureSubmit gateway.
+dependencies[] = uc_payment
+dependencies[] = uc_credit
+dependencies[] = libraries
+package = Ubercart - payment
+core = 7.x
+
