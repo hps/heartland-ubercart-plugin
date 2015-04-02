@@ -208,12 +208,12 @@ function uc_securesubmit_charge($order_id, $amount, $data) {
     }
 
     try {
-        $config = new HpsConfiguration();
+        $config = new HpsServicesConfig();
         $config->secretApiKey = $secret_key;
         $config->versionNumber = '1823';
         $config->developerId = '002914';
 
-        $chargeService = new HpsChargeService($config);
+        $chargeService = new HpsCreditService($config);
 
         $address = new HpsAddress();
         $address->address = $order->billing_street1;
