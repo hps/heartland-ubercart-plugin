@@ -39,10 +39,29 @@ jQuery(function () {
       success: function (response) {
         jQuery(tokenSelector).val(response.token_value);
 
-        jQuery('[id^="edit-panes-payment-details-cc-number"]').val('4111111111111111');
-        jQuery('[id^="edit-panes-payment-details-cc-exp-month"]').val(month);
-        jQuery('[id^="edit-panes-payment-details-cc-exp-year"]').val(year);
-        jQuery('[id^="edit-panes-payment-details-cc-cvv"]').val("123");
+        // Construct a fake number with the correct last four.
+        // Requires uc_credit 'Validate credit card numbers
+        // at checkout' option to be disabled.
+        jQuery('[id^="edit-panes-payment-details-cc-number"]')
+          .val('411111111111' + response.card.number.replace(/\*/g, ''));
+
+        // Work magic on expiration date select nodes
+        jQuery('[name="panes[payment][details][cc_exp_month]"] option')
+          .removeAttr('selected')
+          .filter(function () {
+            return parseInt(jQuery(this).val(), 10) === parseInt(response.exp_month, 10);
+          })[0]
+          .selected = true;
+        jQuery('[name="panes[payment][details][cc_exp_year]"] option')
+          .removeAttr('selected')
+          .filter(function () {
+            return parseInt(jQuery(this).val(), 10) === parseInt(response.exp_year, 10);
+          })[0]
+          .selected = true;
+
+        // Dummy CVV
+        jQuery('[id^="edit-panes-payment-details-cc-cvv"]')
+          .val("123");
 
         buttonClicked = true;
         submitButton.click();
