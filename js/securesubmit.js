@@ -1,6 +1,6 @@
 /*global jQuery, hps, securesubmit_public_key*/
 jQuery(function () {
-  var form = jQuery('#uc-cart-checkout-form');
+  var form = jQuery('.uc-cart-checkout-form');
   var submitButton = form.find('#edit-continue');
   var buttonClicked = false;
   var prep = function () {
@@ -39,10 +39,10 @@ jQuery(function () {
       success: function (response) {
         jQuery(tokenSelector).val(response.token_value);
 
-        jQuery("#edit-panes-payment-details-cc-number").val('4111111111111111');
-        jQuery("#edit-panes-payment-details-cc-exp-month").val(month);
-        jQuery("#edit-panes-payment-details-cc-exp-year").val(year);
-        jQuery("#edit-panes-payment-details-cc-cvv").val("123");
+        jQuery('[id^="edit-panes-payment-details-cc-number"]').val('4111111111111111');
+        jQuery('[id^="edit-panes-payment-details-cc-exp-month"]').val(month);
+        jQuery('[id^="edit-panes-payment-details-cc-exp-year"]').val(year);
+        jQuery('[id^="edit-panes-payment-details-cc-cvv"]').val("123");
 
         buttonClicked = true;
         submitButton.click();
