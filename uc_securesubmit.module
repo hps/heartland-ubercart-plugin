@@ -30,7 +30,7 @@ function uc_securesubmit_libraries_info() {
   $libraries['securesubmit'] = array(
     'name' => 'SecureSubmit PHP SDK',
     'vendor url' => 'https://developer.heartlandpaymentsystems.com/securesubmit/',
-    'download url' => 'https://github.com/hps/heartland-php',
+    'download url' => 'https://github.com/SecureSubmit/heartland-php',
     'path' => 'lib',
     'version arguments' => array(
       'file' => 'VERSION',
