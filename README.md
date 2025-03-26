@@ -1,3 +1,5 @@
+# ** This repository is no longer maintained! **
+
 ## SecureSubmit UberCart Payment Gateway
 
 This plugin allows Drupal 7.x users running Ubercart 3.x to take secure, PCI-DSS friendly credit card payments using Heartland Payment Systems.
